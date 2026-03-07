@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="AI-Powered Fake Review Detection System — Detect fake and genuine reviews using Machine Learning and Deep Learning.">
+    <title>Fake Review Detector — AI Analysis</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <span class="brand-icon">🛡️</span>
+            <span class="brand-text">FakeGuard AI</span>
+        </div>
+        <div class="nav-links">
+            <a href="/" class="nav-link active">Detector</a>
+            <a href="/dashboard" class="nav-link">Dashboard</a>
+        </div>
+    </nav>
+
+    <main class="hero">
+        <div class="hero-content">
+            <div class="hero-badge">AI-Powered Detection</div>
+            <h1>Fake Review <span class="gradient-text">Detector</span></h1>
+            <p class="hero-subtitle">
+                Leverage advanced NLP, Machine Learning, and Explainable AI to instantly
+                identify deceptive reviews with confidence scores and transparent explanations.
+            </p>
+        </div>
+
+        <div class="card input-card">
+            {% if error %}
+            <div class="alert alert-error">
+                <span>⚠️</span> {{ error }}
+            </div>
+            {% endif %}
+            <form action="/predict" method="POST" id="review-form">
+                <label for="review_text" class="input-label">Paste or type a review</label>
+                <textarea
+                    id="review_text"
+                    name="review_text"
+                    rows="6"
+                    placeholder="e.g. This product is absolutely amazing! Best purchase I have ever made in my entire life! Everyone should buy this right now!!!"
+                    required
+                ></textarea>
+                <div class="form-footer">
+                    <span class="char-count" id="char-count">0 characters</span>
+                    <button type="submit" class="btn btn-primary" id="analyze-btn">
+                        <span class="btn-icon">🔍</span>
+                        Analyze Review
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">🧠</div>
+                <h3>5 AI Models</h3>
+                <p>LR, RF, SVM, LSTM & BERT ensemble for robust detection</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">📊</div>
+                <h3>Explainable AI</h3>
+                <p>SHAP-based feature attribution for transparent predictions</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">💬</div>
+                <h3>Sentiment Analysis</h3>
+                <p>VADER-powered sentiment scoring and classification</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🕵️</div>
+                <h3>Behavior Analysis</h3>
+                <p>Detect suspicious reviewer patterns and anomalies</p>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const textarea = document.getElementById('review_text');
+        const charCount = document.getElementById('char-count');
+        textarea.addEventListener('input', () => {
+            charCount.textContent = textarea.value.length + ' characters';
+        });
+    </script>
+</body>
+</html>

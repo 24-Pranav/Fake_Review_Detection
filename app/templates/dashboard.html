@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard — FakeGuard AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <span class="brand-icon">🛡️</span>
+            <span class="brand-text">FakeGuard AI</span>
+        </div>
+        <div class="nav-links">
+            <a href="/" class="nav-link">Detector</a>
+            <a href="/dashboard" class="nav-link active">Dashboard</a>
+        </div>
+    </nav>
+
+    <main class="dashboard-page">
+        <div class="dashboard-header">
+            <h1>Analytics <span class="gradient-text">Dashboard</span></h1>
+            <p class="dash-subtitle">Insights from {{ total_reviews }} reviews in the dataset</p>
+        </div>
+
+        {% if error %}
+        <div class="alert alert-error">{{ error }}</div>
+        {% else %}
+
+        <!-- Stats Row -->
+        <div class="stats-row">
+            <div class="stat-card genuine-stat">
+                <div class="stat-number">{{ genuine_count }}</div>
+                <div class="stat-label">Genuine Reviews</div>
+            </div>
+            <div class="stat-card fake-stat">
+                <div class="stat-number">{{ fake_count }}</div>
+                <div class="stat-label">Fake Reviews</div>
+            </div>
+            <div class="stat-card total-stat">
+                <div class="stat-number">{{ total_reviews }}</div>
+                <div class="stat-label">Total Reviews</div>
+            </div>
+        </div>
+
+        <!-- Charts Grid -->
+        <div class="charts-grid">
+            <!-- Pie Chart: Fake vs Genuine -->
+            <div class="card chart-card">
+                <h3 class="card-title">📊 Fake vs Genuine Distribution</h3>
+                <div class="chart-container">
+                    <canvas id="distributionChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Bar Chart: Sentiment -->
+            <div class="card chart-card">
+                <h3 class="card-title">💬 Sentiment Breakdown</h3>
+                <div class="chart-container">
+                    <canvas id="sentimentChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Horizontal Bar: Top Words -->
+            <div class="card chart-card chart-wide">
+                <h3 class="card-title">🔤 Most Frequent Words in Fake Reviews</h3>
+                <div class="chart-container chart-wide-inner">
+                    <canvas id="wordsChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Review Length Distribution -->
+            <div class="card chart-card chart-wide">
+                <h3 class="card-title">📏 Review Length Distribution</h3>
+                <div class="chart-container chart-wide-inner">
+                    <canvas id="lengthChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Model Results Table -->
+        {% if model_results %}
+        <div class="card chart-card">
+            <h3 class="card-title">🏆 Model Performance Comparison</h3>
+            <div class="table-wrapper">
+                <table class="model-table">
+                    <thead>
+                        <tr>
+                            <th>Model</th>
+                            <th>Accuracy</th>
+                            <th>Precision</th>
+                            <th>Recall</th>
+                            <th>F1 Score</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in model_results %}
+                        <tr>
+                            <td class="model-name">{{ r.model }}</td>
+                            <td>{{ "%.4f"|format(r.accuracy) }}</td>
+                            <td>{{ "%.4f"|format(r.precision) }}</td>
+                            <td>{{ "%.4f"|format(r.recall) }}</td>
+                            <td>{{ "%.4f"|format(r.f1) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        {% endif %}
+    </main>
+
+    <script>
+        // ── Distribution Pie ────────────────────────────────────────────
+        new Chart(document.getElementById('distributionChart'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Genuine', 'Fake'],
+                datasets: [{
+                    data: [{{ genuine_count }}, {{ fake_count }}],
+                    backgroundColor: ['#10b981', '#ef4444'],
+                    borderColor: ['#064e3b', '#7f1d1d'],
+                    borderWidth: 2,
+                    hoverOffset: 8,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { color: '#e2e8f0', font: { family: 'Inter', size: 13 } }
+                    }
+                }
+            }
+        });
+
+        // ── Sentiment Bar ───────────────────────────────────────────────
+        const sentColors = {
+            'Positive': '#10b981',
+            'Negative': '#ef4444',
+            'Neutral': '#6366f1',
+        };
+        const sentLabels = {{ sent_labels | tojson }};
+        const sentBg = sentLabels.map(l => sentColors[l] || '#6366f1');
+
+        new Chart(document.getElementById('sentimentChart'), {
+            type: 'bar',
+            data: {
+                labels: sentLabels,
+                datasets: [{
+                    label: 'Count',
+                    data: {{ sent_values | tojson }},
+                    backgroundColor: sentBg,
+                    borderRadius: 6,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { ticks: { color: '#94a3b8', font: { family: 'Inter' } }, grid: { display: false } },
+                    y: { ticks: { color: '#94a3b8', font: { family: 'Inter' } }, grid: { color: '#1e293b' } }
+                },
+                plugins: {
+                    legend: { display: false }
+                }
+            }
+        });
+
+        // ── Top Words Horizontal Bar ────────────────────────────────────
+        new Chart(document.getElementById('wordsChart'), {
+            type: 'bar',
+            data: {
+                labels: {{ tw_labels | tojson }},
+                datasets: [{
+                    label: 'Frequency',
+                    data: {{ tw_values | tojson }},
+                    backgroundColor: '#8b5cf6',
+                    borderRadius: 4,
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { ticks: { color: '#94a3b8', font: { family: 'Inter' } }, grid: { color: '#1e293b' } },
+                    y: { ticks: { color: '#e2e8f0', font: { family: 'Inter', size: 12 } }, grid: { display: false } }
+                },
+                plugins: {
+                    legend: { display: false }
+                }
+            }
+        });
+
+        // ── Review Length Distribution Bar ───────────────────────────────
+        new Chart(document.getElementById('lengthChart'), {
+            type: 'bar',
+            data: {
+                labels: {{ rl_labels | tojson }},
+                datasets: [{
+                    label: 'Reviews',
+                    data: {{ rl_values | tojson }},
+                    backgroundColor: '#06b6d4',
+                    borderRadius: 6,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { ticks: { color: '#94a3b8', font: { family: 'Inter' } }, grid: { display: false } },
+                    y: { ticks: { color: '#94a3b8', font: { family: 'Inter' } }, grid: { color: '#1e293b' } }
+                },
+                plugins: {
+                    legend: { display: false }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

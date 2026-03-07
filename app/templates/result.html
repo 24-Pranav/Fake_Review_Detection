@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Result — FakeGuard AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <span class="brand-icon">🛡️</span>
+            <span class="brand-text">FakeGuard AI</span>
+        </div>
+        <div class="nav-links">
+            <a href="/" class="nav-link">Detector</a>
+            <a href="/dashboard" class="nav-link">Dashboard</a>
+        </div>
+    </nav>
+
+    <main class="results-page">
+        <a href="/" class="back-link">← Analyze another review</a>
+
+        <!-- Prediction Badge -->
+        <div class="result-hero">
+            <div class="prediction-badge {{ 'fake' if label == 'FAKE' else 'genuine' }}">
+                <span class="badge-icon">{{ '🚨' if label == 'FAKE' else '✅' }}</span>
+                <span class="badge-label">{{ label }}</span>
+            </div>
+            {% if confidence %}
+            <div class="confidence-section">
+                <span class="confidence-label">Confidence</span>
+                <div class="confidence-bar-wrapper">
+                    <div class="confidence-bar" style="width: {{ confidence }}%"></div>
+                </div>
+                <span class="confidence-value">{{ confidence }}%</span>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Review Text -->
+        <div class="card result-card">
+            <h3 class="card-title">📝 Analyzed Review</h3>
+            <blockquote class="review-quote">{{ review_text }}</blockquote>
+        </div>
+
+        <!-- Sentiment Analysis -->
+        <div class="card result-card">
+            <h3 class="card-title">💬 Sentiment Analysis</h3>
+            <div class="sentiment-grid">
+                <div class="sentiment-item">
+                    <span class="sentiment-label-tag {{ sentiment_label|lower }}">{{ sentiment_label }}</span>
+                </div>
+                <div class="sentiment-scores">
+                    <div class="score-item">
+                        <span class="score-name">Positive</span>
+                        <div class="score-bar-wrapper">
+                            <div class="score-bar positive" style="width: {{ (sentiment_scores.pos * 100)|round }}%"></div>
+                        </div>
+                        <span class="score-val">{{ (sentiment_scores.pos * 100)|round(1) }}%</span>
+                    </div>
+                    <div class="score-item">
+                        <span class="score-name">Neutral</span>
+                        <div class="score-bar-wrapper">
+                            <div class="score-bar neutral" style="width: {{ (sentiment_scores.neu * 100)|round }}%"></div>
+                        </div>
+                        <span class="score-val">{{ (sentiment_scores.neu * 100)|round(1) }}%</span>
+                    </div>
+                    <div class="score-item">
+                        <span class="score-name">Negative</span>
+                        <div class="score-bar-wrapper">
+                            <div class="score-bar negative" style="width: {{ (sentiment_scores.neg * 100)|round }}%"></div>
+                        </div>
+                        <span class="score-val">{{ (sentiment_scores.neg * 100)|round(1) }}%</span>
+                    </div>
+                    <div class="score-item">
+                        <span class="score-name">Compound</span>
+                        <div class="score-bar-wrapper">
+                            <div class="score-bar compound" style="width: {{ ((sentiment_scores.compound + 1) / 2 * 100)|round }}%"></div>
+                        </div>
+                        <span class="score-val">{{ sentiment_scores.compound|round(3) }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SHAP Explanation -->
+        {% if shap_features %}
+        <div class="card result-card">
+            <h3 class="card-title">🧠 AI Explanation (SHAP)</h3>
+            <p class="card-desc">Top features contributing to the prediction:</p>
+            <div class="shap-table-wrapper">
+                <table class="shap-table">
+                    <thead>
+                        <tr>
+                            <th>Feature / Word</th>
+                            <th>SHAP Value</th>
+                            <th>Direction</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for feat in shap_features %}
+                        <tr>
+                            <td class="feat-name">{{ feat.feature }}</td>
+                            <td class="feat-value">{{ feat.shap_value }}</td>
+                            <td>
+                                {% if feat.shap_value > 0 %}
+                                <span class="direction fake-dir">→ Fake</span>
+                                {% else %}
+                                <span class="direction genuine-dir">→ Genuine</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </main>
+</body>
+</html>
