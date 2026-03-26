@@ -6,6 +6,147 @@
     <title>Result — FakeGuard AI</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* ── Trust Gauge ─────────────────────────────────────────── */
+        .trust-gauge-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 1.5rem;
+        }
+        .trust-gauge {
+            position: relative;
+            width: 180px;
+            height: 90px;
+            overflow: hidden;
+        }
+        .trust-gauge-bg {
+            width: 180px;
+            height: 90px;
+            border-radius: 90px 90px 0 0;
+            background: conic-gradient(
+                from 0.75turn,
+                #ff4d4d 0%,
+                #ffaa33 25%,
+                #44dd66 50%
+            );
+            position: absolute;
+            top: 0;
+        }
+        .trust-gauge-mask {
+            width: 140px;
+            height: 70px;
+            border-radius: 70px 70px 0 0;
+            background: var(--bg-card, #1a1a2e);
+            position: absolute;
+            top: 20px;
+            left: 20px;
+        }
+        .trust-gauge-needle {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            width: 3px;
+            height: 70px;
+            background: #fff;
+            border-radius: 2px;
+            transform-origin: bottom center;
+            transform: rotate({{ (consensus_pct - 50) * 1.8 }}deg);
+            transition: transform 1s ease;
+            box-shadow: 0 0 8px rgba(255,255,255,0.5);
+        }
+        .trust-gauge-center {
+            position: absolute;
+            bottom: -6px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #fff;
+        }
+        .trust-gauge-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: {% if consensus_pct >= 80 %}#44dd66{% elif consensus_pct >= 60 %}#ffaa33{% else %}#ff4d4d{% endif %};
+            margin-top: 0.5rem;
+        }
+        .trust-gauge-label {
+            font-size: 0.85rem;
+            color: rgba(255,255,255,0.6);
+            margin-top: 0.25rem;
+        }
+
+        /* ── Ensemble Votes ──────────────────────────────────────── */
+        .ensemble-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+        .ensemble-vote {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.6rem 0.8rem;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            font-size: 0.85rem;
+        }
+        .ensemble-vote .vote-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .vote-dot.fake { background: #ff4d4d; }
+        .vote-dot.genuine { background: #44dd66; }
+
+        /* ── Recommendation Box ──────────────────────────────────── */
+        .recommendation-inner {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 1rem 1.25rem;
+            border-radius: 10px;
+            background: linear-gradient(135deg, rgba(167,139,250,0.08), rgba(96,165,250,0.08));
+            border-left: 4px solid #a78bfa;
+        }
+        .rec-icon {
+            font-size: 1.5rem;
+            flex-shrink: 0;
+            margin-top: 0.1rem;
+        }
+        .rec-text {
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+        .rec-model-tag {
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            background: rgba(167,139,250,0.2);
+            color: #a78bfa;
+            font-weight: 600;
+            font-size: 0.8rem;
+            margin-left: 0.25rem;
+        }
+
+        /* ── Readability Alert ────────────────────────────────────── */
+        .readability-alert {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            padding: 0.85rem 1rem;
+            border-radius: 8px;
+            background: rgba(255,170,51,0.1);
+            border: 1px solid rgba(255,170,51,0.25);
+            margin-top: 1rem;
+            font-size: 0.88rem;
+            line-height: 1.5;
+        }
+    </style>
 </head>
 <body>
     <nav class="navbar">
@@ -43,7 +184,42 @@
         <div class="card result-card">
             <h3 class="card-title">📝 Analyzed Review</h3>
             <blockquote class="review-quote">{{ review_text }}</blockquote>
+            {% if readability_flag %}
+            <div class="readability-alert">
+                <span>🤖</span>
+                <span>{{ readability_flag }}</span>
+            </div>
+            {% endif %}
         </div>
+
+        <!-- Ensemble Trust Gauge -->
+        {% if ensemble_votes %}
+        <div class="card result-card">
+            <h3 class="card-title">🎯 Ensemble Trust Gauge</h3>
+            <p class="card-desc">Consensus across {{ ensemble_votes|length }} models:</p>
+            <div class="trust-gauge-container">
+                <div class="trust-gauge">
+                    <div class="trust-gauge-bg"></div>
+                    <div class="trust-gauge-mask"></div>
+                    <div class="trust-gauge-needle"></div>
+                    <div class="trust-gauge-center"></div>
+                </div>
+                <div class="trust-gauge-value">{{ consensus_pct }}%</div>
+                <div class="trust-gauge-label">
+                    Models agree: <strong>{{ consensus_label }}</strong>
+                </div>
+            </div>
+            <div class="ensemble-grid">
+                {% for model_name, vote in ensemble_votes.items() %}
+                <div class="ensemble-vote">
+                    <span class="vote-dot {{ vote|lower }}"></span>
+                    <span>{{ model_name }}</span>
+                    <span style="margin-left: auto; font-weight: 600; color: {{ '#ff4d4d' if vote == 'FAKE' else '#44dd66' }};">{{ vote }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
 
         <!-- Sentiment Analysis -->
         <div class="card result-card">
@@ -116,6 +292,51 @@
                     </tbody>
                 </table>
             </div>
+        </div>
+        {% endif %}
+
+        <!-- LSTM Analysis -->
+        {% if lstm_label %}
+        <div class="card result-card">
+            <h3 class="card-title">🔮 LSTM Deep Learning Analysis</h3>
+            <p class="card-desc">Independent prediction from the LSTM neural network:</p>
+            <div style="display: flex; align-items: center; gap: 1.5rem; margin-top: 1rem;">
+                <div class="prediction-badge {{ 'fake' if lstm_label == 'FAKE' else 'genuine' }}" style="transform: scale(0.85);">
+                    <span class="badge-icon">{{ '🚨' if lstm_label == 'FAKE' else '✅' }}</span>
+                    <span class="badge-label">{{ lstm_label }}</span>
+                </div>
+                {% if lstm_confidence %}
+                <div class="confidence-section" style="flex: 1;">
+                    <span class="confidence-label">LSTM Confidence</span>
+                    <div class="confidence-bar-wrapper">
+                        <div class="confidence-bar" style="width: {{ lstm_confidence }}%"></div>
+                    </div>
+                    <span class="confidence-value">{{ lstm_confidence }}%</span>
+                </div>
+                {% endif %}
+            </div>
+            {% if lstm_label != label %}
+            <div class="alert alert-error" style="margin-top: 1rem;">
+                <span>⚠️</span> The LSTM model disagrees with the primary model. Consider reviewing the review more carefully.
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Expert Recommendation -->
+        {% if recommendation %}
+        <div class="card result-card">
+            <h3 class="card-title">💡 Expert Recommendation</h3>
+            <div class="recommendation-inner">
+                <span class="rec-icon">🎓</span>
+                <div class="rec-text">
+                    {{ recommendation }}
+                    <span class="rec-model-tag">{{ rec_model }}</span>
+                </div>
+            </div>
+            <p class="card-desc" style="margin-top: 0.75rem; font-size: 0.8rem; opacity: 0.6;">
+                This recommendation is generated by the AI Advisory Layer based on real-time F1-Scores, review characteristics, and behavioral analysis.
+            </p>
         </div>
         {% endif %}
     </main>

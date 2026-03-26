@@ -5,6 +5,7 @@ Routes:
   GET  /           -> Review input form
   POST /predict    -> Prediction result + explanation
   GET  /dashboard  -> Analytics dashboard
+  GET  /setup      -> Setup instructions (when models missing)
 """
 
 import os
@@ -18,7 +19,7 @@ import joblib
 import numpy as np
 import pandas as pd
 from collections import Counter
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, redirect, url_for
 
 from modules.preprocessing import preprocess_text
 from modules.sentiment_analysis import get_sentiment, get_sentiment_label
@@ -26,22 +27,134 @@ from modules.explainability import explain_prediction
 
 app = Flask(__name__)
 
-# ── Load Model & Vectorizer ───────────────────────────────────────────────
+# ── Paths ─────────────────────────────────────────────────────────────────
 MODELS_DIR = os.path.join(PROJECT_ROOT, "models")
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 
-model = joblib.load(os.path.join(MODELS_DIR, "model.pkl"))
-vectorizer = joblib.load(os.path.join(MODELS_DIR, "vectorizer.pkl"))
-print("[OK] Model (model.pkl) and vectorizer (vectorizer.pkl) loaded")
+# ── Global model state ────────────────────────────────────────────────────
+sklearn_model = None
+vectorizer = None
+lstm_model = None
+lstm_tokenizer_config = None
+all_sklearn_models = {}      # name -> model object for ensemble
+model_loaded = False
+lstm_loaded = False
+missing_files = []
 
 
+# ──────────────────────────────────────────────────────────────────────────
+#  safe_load() — prevents crashes when .pkl / .h5 files are missing
+# ──────────────────────────────────────────────────────────────────────────
+def safe_load(path, loader="joblib"):
+    """
+    Safely load a model file. Returns None instead of crashing.
+
+    Parameters
+    ----------
+    path : str – absolute path to the model file
+    loader : str – 'joblib', 'pickle', or 'keras'
+    """
+    try:
+        if not os.path.exists(path):
+            print(f"[!] File not found: {os.path.basename(path)}")
+            return None
+
+        if loader == "joblib":
+            return joblib.load(path)
+        elif loader == "pickle":
+            import pickle
+            with open(path, "rb") as f:
+                return pickle.load(f)
+        elif loader == "keras":
+            os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+            import tensorflow as tf
+            tf.get_logger().setLevel("ERROR")
+            return tf.keras.models.load_model(path)
+        else:
+            raise ValueError(f"Unknown loader: {loader}")
+    except ImportError:
+        print(f"[!] Required library not installed for {os.path.basename(path)}")
+        return None
+    except Exception as e:
+        print(f"[!] Error loading {os.path.basename(path)}: {e}")
+        return None
+
+
+def load_models():
+    """Load all models using safe_load(). Sets global flags."""
+    global sklearn_model, vectorizer, lstm_model, lstm_tokenizer_config
+    global all_sklearn_models, model_loaded, lstm_loaded, missing_files
+    missing_files = []
+
+    # ── Primary sklearn model + vectorizer ────────────────────────────
+    sklearn_model = safe_load(os.path.join(MODELS_DIR, "model.pkl"))
+    vectorizer = safe_load(os.path.join(MODELS_DIR, "vectorizer.pkl"))
+
+    if sklearn_model is None:
+        missing_files.append("model.pkl")
+    if vectorizer is None:
+        missing_files.append("vectorizer.pkl")
+
+    model_loaded = sklearn_model is not None and vectorizer is not None
+    if model_loaded:
+        print("[OK] Model (model.pkl) and vectorizer (vectorizer.pkl) loaded")
+
+    # ── Load ALL sklearn models for ensemble ──────────────────────────
+    for name, fname in [("Logistic Regression", "logistic_regression.pkl"),
+                        ("Random Forest", "random_forest.pkl"),
+                        ("SVM", "svm.pkl")]:
+        m = safe_load(os.path.join(MODELS_DIR, fname))
+        if m is not None:
+            all_sklearn_models[name] = m
+
+    if all_sklearn_models:
+        print(f"[OK] Loaded {len(all_sklearn_models)} sklearn models for ensemble")
+
+    # ── LSTM model + tokenizer ────────────────────────────────────────
+    lstm_path = os.path.join(MODELS_DIR, "lstm_model.h5")
+    if not os.path.exists(lstm_path):
+        lstm_path = os.path.join(MODELS_DIR, "lstm_model.keras")
+
+    lstm_model = safe_load(lstm_path, loader="keras")
+    lstm_tokenizer_config = safe_load(
+        os.path.join(MODELS_DIR, "lstm_tokenizer.pkl"), loader="pickle"
+    )
+
+    lstm_loaded = lstm_model is not None and lstm_tokenizer_config is not None
+    if lstm_loaded:
+        print("[OK] LSTM model and tokenizer loaded")
+    else:
+        print("[!] LSTM inference disabled (model or tokenizer missing)")
+
+
+# Load models on startup
+load_models()
+
+
+# ──────────────────────────────────────────────────────────────────────────
+#  Routes
+# ──────────────────────────────────────────────────────────────────────────
 @app.route("/")
 def index():
+    if not model_loaded:
+        return redirect(url_for("setup"))
     return render_template("index.html")
+
+
+@app.route("/setup")
+def setup():
+    return render_template(
+        "setup.html",
+        missing_files=missing_files,
+        project_root=PROJECT_ROOT,
+    )
 
 
 @app.route("/predict", methods=["POST"])
 def predict():
+    if not model_loaded:
+        return redirect(url_for("setup"))
+
     review_text = request.form.get("review_text", "").strip()
     if not review_text:
         return render_template("index.html", error="Please enter a review.")
@@ -49,21 +162,20 @@ def predict():
     # Preprocess
     clean = preprocess_text(review_text)
 
-    # Feature vector
+    # ── Feature vector (shared across sklearn models) ─────────────────
     from modules.feature_extraction import build_features
     X, _ = build_features([clean], fit=False, vectorizer=vectorizer)
 
-    # Predict
-    prediction = model.predict(X)[0]
+    # ── Primary sklearn prediction ────────────────────────────────────
+    prediction = sklearn_model.predict(X)[0]
     label = "FAKE" if prediction == 1 else "GENUINE"
 
     # Confidence
-    if hasattr(model, "predict_proba"):
-        proba = model.predict_proba(X)[0]
+    if hasattr(sklearn_model, "predict_proba"):
+        proba = sklearn_model.predict_proba(X)[0]
         confidence = round(max(proba) * 100, 1)
-    elif hasattr(model, "decision_function"):
-        decision = model.decision_function(X)[0]
-        # Convert SVM decision function to pseudo-probability using sigmoid
+    elif hasattr(sklearn_model, "decision_function"):
+        decision = sklearn_model.decision_function(X)[0]
         prob = 1 / (1 + np.exp(-decision))
         confidence = round(max(prob, 1 - prob) * 100, 1)
     else:
@@ -74,7 +186,81 @@ def predict():
     sentiment_label = get_sentiment_label(review_text)
 
     # SHAP explanation
-    shap_features = explain_prediction(model, vectorizer, clean, top_n=8)
+    shap_features = explain_prediction(sklearn_model, vectorizer, clean, top_n=8)
+
+    # ── Ensemble predictions (all sklearn models) ─────────────────────
+    ensemble_votes = {}  # model_name -> "FAKE" | "GENUINE"
+    for name, mdl in all_sklearn_models.items():
+        try:
+            pred = mdl.predict(X)[0]
+            ensemble_votes[name] = "FAKE" if pred == 1 else "GENUINE"
+        except Exception:
+            pass
+
+    # ── LSTM prediction ───────────────────────────────────────────────
+    lstm_label = None
+    lstm_confidence = None
+    if lstm_loaded and lstm_model is not None and lstm_tokenizer_config is not None:
+        try:
+            from tensorflow.keras.preprocessing.sequence import pad_sequences
+            tok = lstm_tokenizer_config["tokenizer"]
+            max_len = lstm_tokenizer_config["max_len"]
+
+            seq = pad_sequences(
+                tok.texts_to_sequences([clean]),
+                maxlen=max_len,
+                padding="post",
+            )
+            lstm_prob = float(lstm_model.predict(seq, verbose=0)[0][0])
+            lstm_label = "FAKE" if lstm_prob > 0.5 else "GENUINE"
+            lstm_confidence = round(max(lstm_prob, 1 - lstm_prob) * 100, 1)
+            ensemble_votes["LSTM"] = lstm_label
+        except Exception as e:
+            print(f"[!] LSTM inference error: {e}")
+
+    # ── Ensemble Trust Gauge (consensus score) ────────────────────────
+    total_models = len(ensemble_votes)
+    if total_models > 0:
+        fake_votes = sum(1 for v in ensemble_votes.values() if v == "FAKE")
+        genuine_votes = total_models - fake_votes
+        consensus_pct = round(max(fake_votes, genuine_votes) / total_models * 100)
+        consensus_label = "FAKE" if fake_votes > genuine_votes else "GENUINE"
+    else:
+        consensus_pct = confidence if confidence else 50
+        consensus_label = label
+
+    # ── Readability flag ──────────────────────────────────────────────
+    readability_flag = None
+    try:
+        from modules.behavior_analysis import calculate_readability
+        r = calculate_readability(review_text)
+        if r.get("is_bot_generated"):
+            readability_flag = r.get("bot_reason", "Suspicious readability pattern detected.")
+        elif r.get("is_unnaturally_consistent"):
+            readability_flag = "Readability is unnaturally consistent — possible AI-generated text."
+    except Exception:
+        pass
+
+    # ── Expert Recommendation (AI Advisory Layer) ─────────────────────
+    try:
+        results_df = pd.read_csv(os.path.join(DATA_DIR, "model_results.csv"))
+        top_model_name = results_df.sort_values(by="f1", ascending=False).iloc[0]["model"]
+    except Exception:
+        top_model_name = "Primary Model"
+
+    word_count = len(review_text.split())
+    if word_count < 10:
+        recommendation = f"For short reviews, SVM excels at precision. Trust {top_model_name} for this case."
+        rec_model = "SVM"
+    elif word_count > 50:
+        recommendation = "For longer reviews, the LSTM model captures sequential context best. Cross-reference its verdict."
+        rec_model = "LSTM"
+    elif sentiment_scores["compound"] > 0.8 or sentiment_scores["compound"] < -0.8:
+        recommendation = "This review has extreme sentiment — the LSTM model is best for detecting emotional manipulation patterns."
+        rec_model = "LSTM"
+    else:
+        recommendation = f"The {top_model_name} is the most balanced expert for this type of review (F1-Score leader)."
+        rec_model = top_model_name
 
     return render_template(
         "result.html",
@@ -84,6 +270,14 @@ def predict():
         sentiment_scores=sentiment_scores,
         sentiment_label=sentiment_label,
         shap_features=shap_features,
+        lstm_label=lstm_label,
+        lstm_confidence=lstm_confidence,
+        ensemble_votes=ensemble_votes,
+        consensus_pct=consensus_pct,
+        consensus_label=consensus_label,
+        readability_flag=readability_flag,
+        recommendation=recommendation,
+        rec_model=rec_model,
     )
 
 

@@ -95,28 +95,45 @@ def train_sklearn_models(X_train, X_test, y_train, y_test):
     return results
 
 
-def train_lstm_model(X_train, X_test, y_train, y_test):
-    """Train an LSTM model on TF-IDF features."""
+def train_lstm_model(texts_train, texts_test, y_train, y_test):
+    """Train an LSTM model using Keras Tokenizer + pad_sequences on raw text."""
     print("\n[*] Training LSTM Neural Network...")
     try:
         os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+        import pickle
         import tensorflow as tf
         tf.get_logger().setLevel("ERROR")
         from tensorflow.keras.models import Sequential
-        from tensorflow.keras.layers import LSTM, Dense, Dropout, Reshape
+        from tensorflow.keras.layers import LSTM, Dense, Dropout, Embedding
         from tensorflow.keras.callbacks import EarlyStopping
+        from tensorflow.keras.preprocessing.text import Tokenizer
+        from tensorflow.keras.preprocessing.sequence import pad_sequences
 
-        # Convert sparse to dense and reshape for LSTM (samples, timesteps, features)
-        X_tr = X_train.toarray() if hasattr(X_train, "toarray") else np.array(X_train)
-        X_te = X_test.toarray() if hasattr(X_test, "toarray") else np.array(X_test)
-        n_features = X_tr.shape[1]
+        # ── Tokenize and pad sequences ────────────────────────────────
+        VOCAB_SIZE = 10000
+        MAX_LEN = 100
 
-        # Reshape: (samples, 1, features) — treat each sample as 1 timestep
-        X_tr = X_tr.reshape((X_tr.shape[0], 1, n_features))
-        X_te = X_te.reshape((X_te.shape[0], 1, n_features))
+        tokenizer = Tokenizer(num_words=VOCAB_SIZE, oov_token="<OOV>")
+        tokenizer.fit_on_texts(texts_train)
 
+        X_tr = pad_sequences(tokenizer.texts_to_sequences(texts_train), maxlen=MAX_LEN, padding="post")
+        X_te = pad_sequences(tokenizer.texts_to_sequences(texts_test), maxlen=MAX_LEN, padding="post")
+
+        # Save tokenizer config for Flask inference
+        tokenizer_config = {
+            "tokenizer": tokenizer,
+            "max_len": MAX_LEN,
+            "vocab_size": VOCAB_SIZE,
+        }
+        tokenizer_path = os.path.join(MODELS_DIR, "lstm_tokenizer.pkl")
+        with open(tokenizer_path, "wb") as f:
+            pickle.dump(tokenizer_config, f)
+        print(f"[OK] LSTM tokenizer saved to {tokenizer_path}")
+
+        # ── Build LSTM model ──────────────────────────────────────────
         model = Sequential([
-            LSTM(64, input_shape=(1, n_features), return_sequences=False),
+            Embedding(VOCAB_SIZE, 64, input_length=MAX_LEN),
+            LSTM(64, return_sequences=False),
             Dropout(0.3),
             Dense(32, activation="relu"),
             Dropout(0.2),
@@ -138,7 +155,7 @@ def train_lstm_model(X_train, X_test, y_train, y_test):
         result = evaluate_model("LSTM", y_test, y_pred)
 
         model.save(os.path.join(MODELS_DIR, "lstm_model.h5"))
-        print("[OK] LSTM model saved")
+        print("[OK] LSTM model saved (lstm_model.h5)")
         return result
 
     except ImportError:
@@ -286,8 +303,13 @@ def main():
     trained_models["Random Forest"] = joblib.load(os.path.join(MODELS_DIR, "random_forest.pkl"))
     trained_models["SVM"] = joblib.load(os.path.join(MODELS_DIR, "svm.pkl"))
 
-    # LSTM
-    lstm_result = train_lstm_model(X_train, X_test, y_train, y_test)
+    # LSTM (uses raw text, not TF-IDF)
+    lstm_result = train_lstm_model(
+        df.loc[texts_train_idx, "clean_text"].tolist(),
+        df.loc[texts_test_idx, "clean_text"].tolist(),
+        df.loc[texts_train_idx, "label"],
+        df.loc[texts_test_idx, "label"],
+    )
     if lstm_result:
         all_results.append(lstm_result)
 

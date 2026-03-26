@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Setup Required — FakeGuard AI</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <span class="brand-icon">🛡️</span>
+            <span class="brand-text">FakeGuard AI</span>
+        </div>
+    </nav>
+
+    <main class="hero">
+        <div class="hero-content">
+            <div class="hero-badge" style="background: rgba(255, 80, 80, 0.15); color: #ff6b6b;">⚠️ Setup Required</div>
+            <h1>Models <span class="gradient-text">Not Found</span></h1>
+            <p class="hero-subtitle">
+                The required model files are missing or corrupted. Please train the models before using the detector.
+            </p>
+        </div>
+
+        <div class="card input-card">
+            <h3 class="card-title" style="margin-bottom: 1rem;">🔧 How to Fix</h3>
+
+            {% if missing_files %}
+            <div class="alert alert-error" style="margin-bottom: 1.5rem;">
+                <span>❌</span> Missing files: <strong>{{ missing_files | join(', ') }}</strong>
+            </div>
+            {% endif %}
+
+            <div style="text-align: left; line-height: 2;">
+                <p><strong>Step 1:</strong> Open a terminal in the project root directory:</p>
+                <code style="display: block; background: rgba(255,255,255,0.05); padding: 0.75rem 1rem; border-radius: 8px; margin: 0.5rem 0 1rem 0; color: #a78bfa;">
+                    cd {{ project_root }}
+                </code>
+
+                <p><strong>Step 2:</strong> Run the training pipeline:</p>
+                <code style="display: block; background: rgba(255,255,255,0.05); padding: 0.75rem 1rem; border-radius: 8px; margin: 0.5rem 0 1rem 0; color: #a78bfa;">
+                    python training/train_models.py
+                </code>
+
+                <p><strong>Step 3:</strong> Restart the Flask application:</p>
+                <code style="display: block; background: rgba(255,255,255,0.05); padding: 0.75rem 1rem; border-radius: 8px; margin: 0.5rem 0 1rem 0; color: #a78bfa;">
+                    python app/app.py
+                </code>
+            </div>
+
+            <div style="margin-top: 1.5rem;">
+                <a href="/" class="btn btn-primary" style="text-decoration: none; display: inline-block;">
+                    <span class="btn-icon">🔄</span> Retry
+                </a>
+            </div>
+        </div>
+    </main>
+</body>
+</html>
