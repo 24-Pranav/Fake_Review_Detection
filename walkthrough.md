@@ -10,7 +10,7 @@ f:\Fake_Review_Detection\
 +-- models/                          # Created after training
 |   +-- model.pkl                    # Best sklearn model (auto-selected)
 |   +-- vectorizer.pkl               # TF-IDF vectorizer
-|   +-- lstm_model.keras             # LSTM neural network
+|   +-- lstm_model.h5                # LSTM neural network
 |   +-- lstm_tokenizer.pkl           # Keras Tokenizer + padding config
 +-- modules/
 |   +-- __init__.py
@@ -46,8 +46,8 @@ f:\Fake_Review_Detection\
 | **Sentiment** | VADER analyzer with compound/pos/neg/neu scores |
 | **Behavior Analysis** | Frequency, text duplication, extreme rating, Flesch-Kincaid readability detection |
 | **Explainability** | SHAP LinearExplainer for top feature attribution (sklearn models only) |
-| **Web App** | Flask with prediction, confidence, SHAP table, LSTM analysis, sentiment breakdown |
-| **Error Handling** | Global model-loading try-except; redirects to setup page if models are missing |
+| **Web App** | Flask with ensemble prediction, Trust Gauge, SHAP table, LSTM analysis, and Expert Recommendation |
+| **Error Handling** | Global model-loading via `safe_load()` try-except; redirects to setup page if models are missing |
 | **Dashboard** | Fake/genuine distribution, sentiment chart, top words, review length distribution, model comparison table |
 
 ## How to Run
@@ -66,7 +66,7 @@ python training/train_models.py
 This generates the dataset, trains all 5 models, auto-selects the best, and saves:
 - `models/model.pkl` (best model)
 - `models/vectorizer.pkl` (TF-IDF vectorizer)
-- `models/lstm_model.keras` (LSTM neural network)
+- `models/lstm_model.h5` (LSTM neural network)
 - `models/lstm_tokenizer.pkl` (Keras tokenizer + padding config)
 - Individual model files (logistic_regression.pkl, random_forest.pkl, svm.pkl)
 

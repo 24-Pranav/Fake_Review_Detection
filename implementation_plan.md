@@ -45,7 +45,7 @@ f:\Fake_Review_Detection\
 
 #### [NEW] [preprocessing.py](file:///f:/Fake_Review_Detection/modules/preprocessing.py)
 - `preprocess_text(text)` — lowercase, strip punctuation, tokenize, remove stopwords, lemmatize
-- Uses NLTK (`WordNetLemmatizer`, `stopwords`, `word_tokenize`)
+- Uses NLTK (`WordNetLemmatizer`, `stopwords`, `word_tokenize`) with a manual string fallback feature in case NLTK downloads fail
 
 #### [NEW] [feature_extraction.py](file:///f:/Fake_Review_Detection/modules/feature_extraction.py)
 - `build_features(df)` — returns combined feature matrix:
@@ -64,6 +64,7 @@ f:\Fake_Review_Detection\
   - `high_frequency` — more reviews than mean + 2 std
   - `repeated_text` — duplicate review texts
   - `extreme_ratings` — >70% of reviews are rating 1 or 5
+- `calculate_readability(text)` → detects bot-generated text based on Flesch-Kincaid grade level and reading ease via the `textstat` library
 
 #### [NEW] [explainability.py](file:///f:/Fake_Review_Detection/modules/explainability.py)
 - `explain_prediction(model, vectorizer, text)` → dict of top feature words and their SHAP values
@@ -79,28 +80,29 @@ f:\Fake_Review_Detection\
 - Train: Logistic Regression, Random Forest, SVM, LSTM, BERT
 - Evaluate each with accuracy, precision, recall, F1, confusion matrix
 - Print metrics table
-- Save models to `models/` dir (`.pkl` for sklearn, `.h5`/`.pt` for DL)
+- Save models to `models/` dir (`.pkl` for sklearn, `.h5`/`.pt` for DL). Also saves `lstm_tokenizer.pkl` for sequence padding (max length = 100).
 
 > [!IMPORTANT]
-> LSTM will use a Keras `Sequential` model on padded TF-IDF vectors. BERT will use `transformers` `BertForSequenceClassification` fine-tuned for 2 epochs (lightweight, to keep training feasible).
+> LSTM uses a Keras `Sequential` model with `Embedding` and `Tokenizer` instead of TF-IDF vectors. BERT uses `transformers` `BertForSequenceClassification` fine-tuned for 2 epochs (lightweight, to keep training feasible).
 
 ---
 
 ### Flask Web Application
 
 #### [NEW] [app.py](file:///f:/Fake_Review_Detection/app/app.py)
-- Loads Logistic Regression model + TF-IDF vectorizer on startup
+- Loads all available sklearn models + LSTM via a robust `safe_load()` function on startup to prevent crashes if files are missing
 - Routes:
   - `GET /` — render input form
-  - `POST /predict` — preprocess input, predict, explain, render result
+  - `POST /predict` — preprocess input, predict, compute Ensemble Consensus (Trust Gauge), explain via SHAP, verify readability, and generate AI Advisory Recommendation, render result
   - `GET /dashboard` — render analytics with charts
-- Passes: prediction label, confidence %, top SHAP features, sentiment
+  - `GET /setup` — fallback instructions if `.pkl` files are corrupted or missing
+- Passes: multiple prediction labels, consensus score, top SHAP features, sentiment, bot detection flags, expert recommendation
 
 #### [NEW] [index.html](file:///f:/Fake_Review_Detection/app/templates/index.html)
 - Text area for review input, submit button
 
 #### [NEW] [result.html](file:///f:/Fake_Review_Detection/app/templates/result.html)
-- Shows: Fake/Genuine badge, confidence score bar, sentiment, SHAP feature table
+- Shows: Fake/Genuine badge, Trust Gauge (conic-gradient UI), ensemble voting grid, Bot Detection warnings, AI Advisory Expert Recommendation, confidence score bar, sentiment bars, SHAP feature table
 
 #### [NEW] [dashboard.html](file:///f:/Fake_Review_Detection/app/templates/dashboard.html)
 - Chart.js charts: fake vs genuine distribution (pie), sentiment breakdown (bar), top words in fake reviews (horizontal bar)
