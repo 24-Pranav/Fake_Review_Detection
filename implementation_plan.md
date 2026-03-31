@@ -131,3 +131,5 @@ f:\Fake_Review_Detection\
 ### Manual Verification
 - After training, confirm `models/` directory contains: `logistic_regression.pkl`, `random_forest.pkl`, `svm.pkl`, `lstm_model.h5`, `bert_model/`, `tfidf_vectorizer.pkl`
 - Submit both genuine-sounding and fake-sounding reviews in the web app and verify reasonable predictions
+
+<!-- Last updated to include Trust Gauge and Readability metrics -->

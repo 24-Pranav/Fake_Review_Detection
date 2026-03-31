@@ -140,3 +140,5 @@ with open("models/lstm_tokenizer.pkl", "rb") as f:
 print(f"LSTM vocab size: {config['vocab_size']}, max_len: {config['max_len']}")
 ```
 
+<!-- Last updated to include Trust Gauge and Readability metrics -->
+
